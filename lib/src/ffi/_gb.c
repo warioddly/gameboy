@@ -43,8 +43,6 @@ static void check_serial_output() {
         }
 
         mmu_write8(&mmu, 0xFF02, 0x00);
-
-        mmu_write8(&mmu, 0xFF02, 0x00); // сброс SC
     }
 }
 

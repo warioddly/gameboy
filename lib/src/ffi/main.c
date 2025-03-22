@@ -1,32 +1,27 @@
-/// For debug
+#include "_gb.h"
 #include <stdio.h>
-#include "mmu.h"
-#include "cpu.h"
+#include <stdlib.h>
 
 int main() {
-//    memory_init();
-//
-//    memory_write(0xC000, 0x43);
-//    uint8_t value = memory_read(0xC000);
-//
-//    printf("Значение по адресу 0xC000: 0x%02X\n", value);
+    gb_init();
 
-    memory_init();
-    cpu_init();
+    FILE* f = fopen("blargg_gb_tests/cpu_instrs/individual/09-op r,r.gb", "rb");
+    if (!f) {
+        printf("ROM not found\n");
+        return 1;
+    }
 
-    // LD C, 0x81
-    memory_write(0x0100, 0x0E); // LD C, n
-    memory_write(0x0101, 0x81);
+    uint8_t rom[0x8000];
+    size_t read = fread(rom, 1, sizeof(rom), f);
+    printf("Read %zu bytes from ROM\n", read);
+    fclose(f);
 
-    // CB 11 → RL C
-    memory_write(0x0102, 0xCB);
-    memory_write(0x0103, 0x11);
+    gb_load_rom(rom, sizeof(rom));
 
-    cpu_step(); // LD C, 0x81
-    cpu_step(); // CB 11
+    for (int i = 0; i < 2000; i++) {
+        gb_step_frame();
+    }
 
-//    printf("Регистр C: 0x%02X\n", cpu.c);
-//    printf("Флаги: 0x%02X\n", cpu.f);
-
+    printf("\nDone\n");
     return 0;
 }

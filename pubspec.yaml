@@ -34,6 +34,7 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  ffi: ^2.1.4
 
 dev_dependencies:
   flutter_test:
@@ -65,7 +66,7 @@ flutter:
 
   assets:
     - assets/roms/
-    - assets/roms/testgb/
+    - assets/roms/cpu_instrs/individual/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -94,12 +95,15 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 ffigen:
+  name: Gameboy
+  description: Gameboy FFI bindings
   output: lib/src/bridge/game_boy_ffi.dart
   headers:
     entry-points:
-      - lib/src/ffi/bridge.h
+      - lib/src/ffi/_gb.h
       - lib/src/ffi/cpu.h
       - lib/src/ffi/mmu.h
       - lib/src/ffi/ppu.h
   compiler-opts:
     - -Ilib/src/ffi
+

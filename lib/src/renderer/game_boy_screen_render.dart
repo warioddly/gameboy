@@ -1,17 +1,13 @@
 import 'dart:ffi' as ffi;
-import 'dart:ffi';
+import 'package:ffi/ffi.dart' as ffi;
 import 'dart:typed_data' show Uint32List;
-import 'dart:ui' as ui;
-
-import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gameboy/src/bridge/game_boy_ffi.dart' as gb;
-import 'package:gameboy/src/renderer/game_boy_screen_painter.dart';
+import 'package:gameboy/src/renderer/frame_buffer_painter.dart';
 
-import 'game_boy_screen_painter_image.dart' show GameBoyScreenPainterImage;
 
-const frameDuration = Duration(milliseconds: 16);
+const frameDuration = Duration(milliseconds: 166);
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
@@ -22,9 +18,9 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
 
-  gb.NativeLibrary? gbEmulator;
-  ValueNotifier buffer = ValueNotifier<Uint32List?>(Uint32List(160 * 144));
-  ui.Image? image;
+  gb.Gameboy? gameboy;
+  final frameBuffer = ValueNotifier<Uint32List>(Uint32List(160 * 144));
+  bool _running = false;
 
   @override
   void initState() {
@@ -41,11 +37,11 @@ class _MyHomePageState extends State<MyHomePage> {
         child: AspectRatio(
           aspectRatio: 160 / 144,
           child: ValueListenableBuilder(
-            valueListenable: buffer,
+            valueListenable: frameBuffer,
             builder: (_, value, _) {
               return CustomPaint(
-                painter: GameBoyScreenPainter(
-                    buffer: value
+                painter: FrameBufferPainter(
+                  frameBuffer: value,
                 ),
               );
             },
@@ -57,56 +53,56 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> init() async {
     final dylib = ffi.DynamicLibrary.open('libgameboy.dylib');
-    gbEmulator = gb.NativeLibrary(dylib);
+
+    gameboy = gb.Gameboy(dylib);
+
+    gameboy?.gb_init();
+
+    await loadRom();
+
+    startEmulatorLoop();
+
+  }
+
+  Future<void> loadRom() async {
 
     final romData = await rootBundle.load('assets/roms/Tetris.gb');
     final bytes = romData.buffer.asUint8List();
+    final romSize = bytes.length;
 
-    loadRom(bytes);
-    startEmulatorLoop();
-  }
+    final ptr = ffi.malloc<ffi.Uint8>(romSize);
 
-  void loadRom(Uint8List romBytes) {
-    final romLength = romBytes.length;
-    final ptr = malloc<Uint8>(romLength);
-    final byteList = ptr.asTypedList(romLength);
-    byteList.setAll(0, romBytes);
-    gbEmulator?.memory_load_rom(ptr, romLength);
-    malloc.free(ptr);
+    ptr.asTypedList(romSize).setAll(0, bytes);
+    gameboy?.gb_load_rom(ptr, romSize);
+
+    ffi.malloc.free(ptr);
   }
 
   void startEmulatorLoop() async {
 
-    gbEmulator?.cpu_init();
-    // gbEmulator?.ppu_init();
+    if (_running) return;
+    _running = true;
 
-    while (true) {
-
-      final cycles = gbEmulator?.cpu_step();
-
-      for (int i = 0; i < (cycles ?? 0); i++) {
-        gbEmulator?.ppu_step();
-      }
-
-      final fbPtr = gbEmulator?.ppu_get_framebuffer();
-      final fb32 = fbPtr?.asTypedList(160 * 144);
-      // final fb8 = fb32?.buffer.asUint8List() ?? Uint8List(160 * 144 * 4);
-
-      // ui.decodeImageFromPixels(
-      //   fb8,
-      //   160,
-      //   144,
-      //   ui.PixelFormat.rgba8888,
-      //   (img) {
-      //     image = img;
-      //     print('image $image');
-      //   },
-      // );
-
-      buffer.value = fb32;
-
-      await Future.delayed(frameDuration);
-
+    final fbPtr = gameboy?.gb_get_framebuffer();
+    if (fbPtr == null) {
+      print("Framebuffer is null");
+      return;
     }
+
+    final fb = fbPtr.asTypedList(160 * 144);
+
+    while (_running) {
+
+      gameboy?.gb_step_frame();
+      frameBuffer.value = fb;
+
+      await Future.delayed(frameDuration); // 16 мс ≈ 60 FPS
+    }
+
   }
+
+  void stopEmulatorLoop() {
+    _running = false;
+  }
+
 }

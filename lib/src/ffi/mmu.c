@@ -1,78 +1,92 @@
 #include "mmu.h"
-#include <string.h>
 #include <stdio.h>
-#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
-static uint8_t rom[0x8000];      // 32 КБ ROM
-static uint8_t vram[0x2000];     // 8 КБ Video RAM
-static uint8_t eram[0x2000];     // 8 КБ External RAM (на картридже)
-static uint8_t wram[0x2000];     // 8 КБ Work RAM
-static uint8_t oam[0xA0];        // 160 Б Sprite RAM
-static uint8_t hram[0x7F];       // 127 Б High RAM
-static uint8_t io[0x80];         // I/O регистры
-static uint8_t interrupt_enable; // IE-регистер (0xFFFF)
 
-void memory_init() {
-    memset(rom, 0, sizeof(rom));
-    memset(vram, 0, sizeof(vram));
-    memset(eram, 0, sizeof(eram));
-    memset(wram, 0, sizeof(wram));
-    memset(oam, 0, sizeof(oam));
-    memset(hram, 0, sizeof(hram));
-    memset(io, 0, sizeof(io));
-    interrupt_enable = 0;
+void mmu_init(MMU* mmu) {
+    memset(mmu, 0, sizeof(MMU));
 }
 
-uint8_t memory_read(uint16_t address) {
-    if (address <= 0x7FFF) {
-        return rom[address]; // ROM
-    } else if (address >= 0x8000 && address <= 0x9FFF) {
-        return vram[address - 0x8000];
-    } else if (address >= 0xA000 && address <= 0xBFFF) {
-        return eram[address - 0xA000];
-    } else if (address >= 0xC000 && address <= 0xDFFF) {
-        return wram[address - 0xC000];
-    } else if (address >= 0xE000 && address <= 0xFDFF) {
-        return wram[address - 0xE000]; // echo
-    } else if (address >= 0xFE00 && address <= 0xFE9F) {
-        return oam[address - 0xFE00];
-    } else if (address >= 0xFF00 && address <= 0xFF7F) {
-        return io[address - 0xFF00];
-    } else if (address >= 0xFF80 && address <= 0xFFFE) {
-        return hram[address - 0xFF80];
-    } else if (address == 0xFFFF) {
-        return interrupt_enable;
+
+uint8_t mmu_read8(MMU* mmu, uint16_t addr) {
+
+    if (!mmu->boot_completed && addr < 0x100) {
+        return mmu->boot_rom[addr];
     }
+
+    if (addr <= 0x3FFF)
+        return mmu->rom[addr];
+    else if (addr <= 0x7FFF)
+        return mmu->rom[addr]; // без MBC
+    else if (addr <= 0x9FFF)
+        return mmu->vram[addr - 0x8000];
+    else if (addr <= 0xBFFF)
+        return mmu->eram[addr - 0xA000];
+    else if (addr <= 0xDFFF)
+        return mmu->wram[addr - 0xC000];
+    else if (addr <= 0xFDFF)
+        return mmu->wram[addr - 0xE000]; // echo
+    else if (addr <= 0xFE9F)
+        return mmu->oam[addr - 0xFE00];
+    else if (addr <= 0xFEFF)
+        return 0xFF; // недоступно
+    else if (addr <= 0xFF7F)
+        return mmu->io[addr - 0xFF00];
+    else if (addr <= 0xFFFE)
+        return mmu->hram[addr - 0xFF80];
+    else if (addr == 0xFFFF)
+        return mmu->ie;
 
     return 0xFF;
 }
 
-void memory_write(uint16_t address, uint8_t value) {
-    if (address <= 0x7FFF) {
+
+void mmu_write8(MMU* mmu, uint16_t addr, uint8_t val) {
+
+    if (addr == 0xFF50 && val == 1) {
+        mmu->boot_completed = true;
         return;
-    } else if (address >= 0x8000 && address <= 0x9FFF) {
-        vram[address - 0x8000] = value;
-    } else if (address >= 0xA000 && address <= 0xBFFF) {
-        eram[address - 0xA000] = value;
-    } else if (address >= 0xC000 && address <= 0xDFFF) {
-        wram[address - 0xC000] = value;
-    } else if (address >= 0xE000 && address <= 0xFDFF) {
-        wram[address - 0xE000] = value; // echo
-    } else if (address >= 0xFE00 && address <= 0xFE9F) {
-        oam[address - 0xFE00] = value;
-    } else if (address >= 0xFF00 && address <= 0xFF7F) {
-        io[address - 0xFF00] = value;
-    } else if (address >= 0xFF80 && address <= 0xFFFE) {
-        hram[address - 0xFF80] = value;
-    } else if (address == 0xFFFF) {
-        interrupt_enable = value;
     }
+
+    if (addr <= 0x7FFF) {
+        // ROM - нельзя писать (позже MBC)
+        // TODO: MBC
+    } else if (addr <= 0x9FFF)
+        mmu->vram[addr - 0x8000] = val;
+    else if (addr <= 0xBFFF)
+        mmu->eram[addr - 0xA000] = val;
+    else if (addr <= 0xDFFF)
+        mmu->wram[addr - 0xC000] = val;
+    else if (addr <= 0xFDFF)
+        mmu->wram[addr - 0xE000] = val; // echo
+    else if (addr <= 0xFE9F)
+        mmu->oam[addr - 0xFE00] = val;
+    else if (addr <= 0xFEFF) {
+        printf("Writing to 0xFE00-0xFEFF is prohibited\n");
+    } else if (addr <= 0xFF7F)
+        mmu->io[addr - 0xFF00] = val;
+    else if (addr <= 0xFFFE)
+        mmu->hram[addr - 0xFF80] = val;
+    else if (addr == 0xFFFF)
+        mmu->ie = val;
 }
 
-void memory_load_rom(const uint8_t* data, size_t size) {
-    if (size > sizeof(rom)) {
-        printf("ROM слишком большой! Обрезаем до 32 КБ\n");
-        size = sizeof(rom);
+
+void mmu_load_rom(MMU* mmu, const uint8_t* data, size_t size) {
+    printf("ROM title: ");
+    for (int i = 0x134; i < 0x144; i++) {
+        if (data[i] == 0) break;
+        putchar(data[i]);
     }
-    memcpy(rom, data, size);
+    printf("\n");
+    printf("ROM loaded, size = %zu\n", size);
+    printf("ROM[0x100..0x110] = ");
+    for (int i = 0x100; i < 0x110; i++) {
+        printf("%02X ", data[i]);
+    }
+    printf("\n");
+    int len = size > 0x8000 ? 0x8000 : size;
+    memcpy(mmu->rom, data, len);
 }

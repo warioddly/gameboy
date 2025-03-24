@@ -66,6 +66,7 @@ flutter:
 
   assets:
     - assets/roms/
+    - assets/roms/cpu_instrs/
     - assets/roms/cpu_instrs/individual/
 
   # An image asset can refer to one or more resolution-specific "variants", see

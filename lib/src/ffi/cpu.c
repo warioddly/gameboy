@@ -63,11 +63,9 @@ int cpu_step_cb(CPU* cpu, uint8_t cbop) {
         case 7: reg = &cpu->a; break;
     }
 
-//    uint8_t opcode = cbop;
     uint8_t x = (cbop >> 6) & 0x03;
     uint8_t y = (cbop >> 3) & 0x07;
 
-    // ----- ROTATE / SHIFT -----
     if (x == 0) {
         uint8_t r = is_mem ? val : *reg;
         uint8_t res = 0;
@@ -119,16 +117,12 @@ int cpu_step_cb(CPU* cpu, uint8_t cbop) {
             return 8;
         }
     }
-
-        // ----- BIT -----
     else if (x == 1) {
         uint8_t r = is_mem ? val : *reg;
         uint8_t bit = (r >> y) & 1;
         cpu->f = (bit == 0 ? 0xA0 : 0x20); // Z = !bit, H = 1, N = 0
         return is_mem ? 12 : 8;
     }
-
-        // ----- RES -----
     else if (x == 2) {
         if (is_mem) {
             val &= ~(1 << y);
@@ -139,8 +133,6 @@ int cpu_step_cb(CPU* cpu, uint8_t cbop) {
             return 8;
         }
     }
-
-        // ----- SET -----
     else if (x == 3) {
         if (is_mem) {
             val |= (1 << y);
@@ -152,7 +144,7 @@ int cpu_step_cb(CPU* cpu, uint8_t cbop) {
         }
     }
 
-    return 4; // fallback
+    return 4;
 }
 
 
@@ -164,93 +156,41 @@ int cpu_step(CPU* cpu) {
 
     switch (opcode) {
         case 0x00: return 4; // NOP
+        case 0x3E: cpu->a = read8(cpu->pc++); return 8; // LD A, n
+        case 0x06: cpu->b = read8(cpu->pc++); return 8; // LD B, n
+        case 0x0E: cpu->c = read8(cpu->pc++); return 8;
+        case 0x16: cpu->d = read8(cpu->pc++); return 8;
+        case 0x1E: cpu->e = read8(cpu->pc++); return 8;
+        case 0x26: cpu->h = read8(cpu->pc++); return 8;
+        case 0x2E: cpu->l = read8(cpu->pc++); return 8;
 
-        case 0x3E: { // LD A, n
-            cpu->a = read8(cpu->pc++);
-            return 8;
-        }
-
-        case 0x06: { cpu->b = read8(cpu->pc++); return 8; } // LD B,n
-        case 0x0E: { cpu->c = read8(cpu->pc++); return 8; } // LD C,n
-        case 0x16: { cpu->d = read8(cpu->pc++); return 8; } // LD D,n
-        case 0x1E: { cpu->e = read8(cpu->pc++); return 8; } // LD E,n
-        case 0x26: { cpu->h = read8(cpu->pc++); return 8; } // LD H,n
-        case 0x2E: { cpu->l = read8(cpu->pc++); return 8; } // LD L,n
-
-        case 0x7F: cpu->a = cpu->a; return 4; // LD A,A
-        case 0x78: cpu->a = cpu->b; return 4; // LD A,B
+        case 0x7F: cpu->a = cpu->a; return 4;
+        case 0x78: cpu->a = cpu->b; return 4;
         case 0x79: cpu->a = cpu->c; return 4;
         case 0x7A: cpu->a = cpu->d; return 4;
         case 0x7B: cpu->a = cpu->e; return 4;
         case 0x7C: cpu->a = cpu->h; return 4;
         case 0x7D: cpu->a = cpu->l; return 4;
+        case 0x7E: cpu->a = read8(cpu->hl); return 8;
 
-        case 0x0A: { // LD A, (BC)
-            cpu->a = read8(cpu->bc);
+        case 0xA8: cpu->a &= cpu->b; cpu->f = (cpu->a == 0 ? 0x80 : 0x00); return 4; // AND B
+        case 0xB0: cpu->a |= cpu->b; cpu->f = (cpu->a == 0 ? 0x80 : 0x00); return 4; // OR B
+        case 0xAF: cpu->a = 0; cpu->f = 0x80; return 4; // XOR A
+        case 0xFE: { // CP n
+            uint8_t val = read8(cpu->pc++);
+            uint8_t res = cpu->a - val;
+            cpu->f = 0x40; // N
+            if (res == 0) cpu->f |= 0x80; // Z
+            if ((val & 0x0F) > (cpu->a & 0x0F)) cpu->f |= 0x20; // H
+            if (val > cpu->a) cpu->f |= 0x10; // C
             return 8;
         }
-        case 0x1A: { // LD A, (DE)
-            cpu->a = read8(cpu->de);
-            return 8;
-        }
-        case 0xFA: { // LD A, (nn)
+
+        case 0xC3: { // JP nn
             uint8_t lo = read8(cpu->pc++);
             uint8_t hi = read8(cpu->pc++);
-            cpu->a = read8((hi << 8) | lo);
+            cpu->pc = (hi << 8) | lo;
             return 16;
-        }
-
-        case 0x32: { // LD (HL-), A
-            write8(cpu->hl, cpu->a);
-            cpu->hl--;
-            return 8;
-        }
-
-        case 0x77: { // LD (HL), A
-            write8(cpu->hl, cpu->a);
-            return 8;
-        }
-
-        case 0xE0: { // LDH (n), A
-            uint8_t n = read8(cpu->pc++);
-            write8(0xFF00 + n, cpu->a);
-            return 12;
-        }
-
-        case 0xE2: { // LD (C), A
-            write8(0xFF00 + cpu->c, cpu->a);
-            return 8;
-        }
-
-        case 0xF0: { // LDH A, (n)
-            uint8_t n = read8(cpu->pc++);
-            cpu->a = read8(0xFF00 + n);
-            return 12;
-        }
-
-        case 0xF2: { // LD A, (C)
-            cpu->a = read8(0xFF00 + cpu->c);
-            return 8;
-        }
-
-        case 0xAF: { // XOR A
-            cpu->a ^= cpu->a;
-            cpu->f = 0x80; // Z=1
-            return 4;
-        }
-
-        case 0x21: { // LD HL, nn
-            uint8_t lo = read8(cpu->pc++);
-            uint8_t hi = read8(cpu->pc++);
-            cpu->hl = (hi << 8) | lo;
-            return 12;
-        }
-
-        case 0x31: { // LD SP, nn
-            uint8_t lo = read8(cpu->pc++);
-            uint8_t hi = read8(cpu->pc++);
-            cpu->sp = (hi << 8) | lo;
-            return 12;
         }
 
         case 0xCD: { // CALL nn
@@ -271,29 +211,31 @@ int cpu_step(CPU* cpu) {
             return 16;
         }
 
-        case 0xC3: { // JP nn
-            uint8_t lo = read8(cpu->pc++);
-            uint8_t hi = read8(cpu->pc++);
-            cpu->pc = (hi << 8) | lo;
-            return 16;
+        case 0xC6: { // ADD A, n
+            uint8_t val = read8(cpu->pc++);
+            uint16_t sum = cpu->a + val;
+            cpu->f = 0;
+            if ((sum & 0xFF) == 0) cpu->f |= 0x80;
+            if ((cpu->a & 0x0F) + (val & 0x0F) > 0x0F) cpu->f |= 0x20;
+            if (sum > 0xFF) cpu->f |= 0x10;
+            cpu->a = sum & 0xFF;
+            return 8;
         }
 
-        case 0xE9: { // JP (HL)
-            cpu->pc = cpu->hl;
-            return 4;
-        }
-
-        case 0xCB: { // CB-префикс
-            uint8_t cbop = read8(cpu->pc++);
-            return cpu_step_cb(cpu, cbop);
+        case 0xCB: {
+            uint8_t cb = read8(cpu->pc++);
+            return cpu_step_cb(cpu, cb);
         }
 
         case 0x76: // HALT
             cpu->halted = 1;
             return 4;
 
+        case 0xF3: cpu->ime = 0; return 4; // DI
+        case 0xFB: cpu->ime_pending = 1; return 4;
+
         default:
-//            printf("Unknown opcode: 0x%02X at PC=0x%04X\n", opcode, cpu->pc - 1);
+//            printf("Unknown opcode 0x%02X at PC=0x%04X\n", opcode, cpu->pc - 1);
             return 4;
     }
 }

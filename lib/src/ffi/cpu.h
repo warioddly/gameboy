@@ -39,7 +39,8 @@ typedef struct {
     uint16_t pc;
 
     int halted;
-    int ime; // interrupt master enable
+    int ime;
+    int ime_pending;
 } CPU;
 
 void cpu_init(CPU* cpu);

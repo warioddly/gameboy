@@ -1,30 +1,37 @@
 import 'dart:ui';
-import 'dart:typed_data' show Uint32List;
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart' hide Image;
 
 
 class FrameBufferPainter extends CustomPainter {
 
-  final Uint32List frameBuffer;
+  final Image? image;
 
-  FrameBufferPainter({super.repaint, required this.frameBuffer});
+  FrameBufferPainter({super.repaint, required this.image});
 
   @override
   void paint(Canvas canvas, Size size) {
 
-    final paint = Paint();
+    final image = this.image;
 
-    for (int i = 0; i < 160; i++) {
-      for (int j = 0; j < 144; j++) {
-        int rgba = frameBuffer[j * 160 + i];
-        int argb = (rgba << 24) | (rgba >> 8);
-        paint.color = Color(argb);
-        canvas.drawRect(
-          Rect.fromLTWH(i * 2.0, j * 2.0, 2.0, 2.0),
-          paint,
+    if (image != null) {
+
+      final paint = Paint()..color = const Color(0xFF000000);
+
+      canvas
+        ..drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint)
+        ..drawImageRect(
+            image,
+            const Rect.fromLTWH(0, 0, 160, 144),
+            Rect.fromLTWH(
+              0,
+              0,
+              size.width,
+              size.height,
+            ),
+            paint,
         );
-      }
+
     }
 
   }

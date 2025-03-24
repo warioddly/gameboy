@@ -5,7 +5,7 @@
 int main() {
     gb_init();
 
-    FILE* f = fopen("blargg_gb_tests/cpu_instrs/individual/09-op r,r.gb", "rb");
+    FILE* f = fopen("assets/roms/cpu_instrs/individual/01-special.gb", "rb");
     if (!f) {
         printf("ROM not found\n");
         return 1;

@@ -1,13 +1,15 @@
 import 'dart:ffi' as ffi;
+import 'dart:ui' as ui;
 import 'package:ffi/ffi.dart' as ffi;
-import 'dart:typed_data' show Uint32List;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Image;
 import 'package:flutter/services.dart';
 import 'package:gameboy/src/bridge/game_boy_ffi.dart' as gb;
 import 'package:gameboy/src/renderer/frame_buffer_painter.dart';
 
 
-const frameDuration = Duration(milliseconds: 166);
+const frameDuration = Duration(milliseconds: 166); // 16 мс ≈ 60 FPS
+const _screenWidth = 160;
+const _screenHeight = 144;
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
@@ -19,7 +21,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
 
   gb.Gameboy? gameboy;
-  final frameBuffer = ValueNotifier<Uint32List>(Uint32List(160 * 144));
+  final frameBuffer = ValueNotifier<ui.Image?>(null);
   bool _running = false;
 
   @override
@@ -35,13 +37,13 @@ class _MyHomePageState extends State<MyHomePage> {
       backgroundColor: Colors.grey,
       body: Center(
         child: AspectRatio(
-          aspectRatio: 160 / 144,
+          aspectRatio: _screenWidth / _screenHeight,
           child: ValueListenableBuilder(
             valueListenable: frameBuffer,
             builder: (_, value, _) {
               return CustomPaint(
                 painter: FrameBufferPainter(
-                  frameBuffer: value,
+                  image: value,
                 ),
               );
             },
@@ -89,14 +91,23 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
-    final fb = fbPtr.asTypedList(160 * 144);
+    final fb = fbPtr.asTypedList(_screenWidth * _screenHeight * 4);
 
     while (_running) {
 
-      gameboy?.gb_step_frame();
-      frameBuffer.value = fb;
+       gameboy?.gb_step_frame();
 
-      await Future.delayed(frameDuration); // 16 мс ≈ 60 FPS
+       ui.decodeImageFromPixels(
+        Uint8List.fromList(fb),
+        _screenWidth,
+        _screenHeight,
+        ui.PixelFormat.rgba8888,
+        (image) {
+          frameBuffer.value = image;
+        }
+      );
+
+      await Future.delayed(frameDuration);
     }
 
   }
